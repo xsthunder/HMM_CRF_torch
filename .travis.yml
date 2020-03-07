@@ -10,7 +10,8 @@ install:
   - hash -r
   - conda config --set always_yes yes --set changeps1 no
   - conda update -q conda
-  - conda create -n py3torch-cpu --file package-list-cpu.txt
+  - conda create -n py3torch-cpu --file package-list-cpu.txt -c pytorch -y
+  - pip install mock==4.0.1 sure==1.4.11 --yes
  
  
 script:

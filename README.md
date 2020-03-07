@@ -6,11 +6,14 @@
 
 ### cpu
 
-`conda create -n py3torch-cpu --file package-list-cpu.txt`
+```bash
+conda create -n py3torch-cpu --file package-list-cpu.txt -c pytorch
+pip install mock==4.0.1 sure==1.4.11
+```
 
 or
  
-```
+```bash
 conda create -n py3torch-cpu python=3.7 scipy -y
 # py3.7 for asyncio.WindowsProactorEventLoopPolicy() support
 conda activate py3torch-cpu
