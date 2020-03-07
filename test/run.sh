@@ -1,6 +1,6 @@
 set -e
-wget baidu.com -P ../data/HMM
-#wget https://raw.githubusercontent.com/fxsjy/jieba/master/jieba/dict.txt -P ../data/HMM
+
+wget https://raw.githubusercontent.com/fxsjy/jieba/master/jieba/dict.txt -P ../data/HMM
 
 # https://docs.travis-ci.com/user/environment-variables/#default-environment-variables
 # TRAVIS=TRUE
