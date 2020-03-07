@@ -16,10 +16,11 @@ install:
   - conda activate py3torch-cpu
   - conda install pytorch=1.4.0 torchvision=0.5.0 cpuonly=1.0 -c pytorch -y
   # for test
-  - pip install sure --yes
+  - yes | pip install sure
  
  
 script:
   - source $HOME/miniconda/etc/profile.d/conda.sh
   - conda activate py3torch-cpu
+  - wget https://raw.githubusercontent.com/fxsjy/jieba/master/jieba/dict.txt > ./data/HMM/dict.txt
   - for file in ./test/*.py; do; python $file; done;
