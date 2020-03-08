@@ -1,5 +1,3 @@
-wget https://raw.githubusercontent.com/fxsjy/jieba/master/jieba/finalseg/prob_start.py
-
-wget https://raw.githubusercontent.com/fxsjy/jieba/master/jieba/finalseg/prob_trans.py
-
-wget https://raw.githubusercontent.com/fxsjy/jieba/master/jieba/dict.txt
+https://raw.githubusercontent.com/xsthunder/jieba/master/jieba/finalseg/prob_start.py
+https://raw.githubusercontent.com/xsthunder/jieba/master/jieba/finalseg/prob_trans.py
+https://raw.githubusercontent.com/xsthunder/jieba/master/jieba/dict.txt

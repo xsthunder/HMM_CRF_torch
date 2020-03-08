@@ -1,0 +1,3 @@
+https://raw.githubusercontent.com/xsthunder/LatticeLSTM/master/ResumeNER/dev.char.bmes
+https://raw.githubusercontent.com/xsthunder/LatticeLSTM/master/ResumeNER/test.char.bmes
+https://raw.githubusercontent.com/xsthunder/LatticeLSTM/master/ResumeNER/train.char.bmes
