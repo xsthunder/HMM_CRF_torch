@@ -12,6 +12,18 @@ def pj(*args, **kargs):
     if common.IN_JUPYTER:
         pprint(*args, **kargs)
 
+import operator
+
+import torch
+from torch import nn
+def onehot(y, num):
+    """
+    y: shape (batch_size, max_seq_len)
+    """
+    assert len(y.shape) == 2, y.shape
+    eye = np.eye(num)
+    return eye[y]
+
 def get_shift_mask(labels):
     """
     labels: (batch_size, max_seq_len, num_label) in onehot all element should be 1/0
@@ -27,3 +39,46 @@ def get_shift_mask(labels):
 
     shift_mask = labels1 * labels2
     return shift_mask
+
+import math
+# 👴的CRF
+class CRF(nn.Module):
+    def __init__(self):
+        super().__init__()
+        # 先不考虑padding标签的问题
+        # 先不考虑mask的问题
+        self.trans = nn.Parameter(torch.Tensor(num_label, num_label))
+        nn.init.kaiming_uniform_(self.trans, a=math.sqrt(5))
+
+    def path_score(self, inputs, labels, trans = None):
+        """
+        score of h(y[i]) ground-truch y[i] plus its g[y[i]][y[i+1]], inputs for h, trans for g
+        inputs.size() # batch_size, max_seq_len, num_label
+        trans.size() # num_label, num_label
+        labels.size() #batch_size, max_seq_len, num_label
+        """
+        trans = self.trans if trans is None else trans
+
+        sum_h_score = inputs * labels # batch_size, max_seq_len, num_label
+        sum_h_score = sum_h_score.sum(-1, ) # batch_size, max_seq_len
+        sum_h_score = sum_h_score.sum(-1, keepdim = True) # batch_size, 1
+
+        mask = get_shift_mask(labels)
+        sum_g_score = mask * trans[None, None]
+        sum_g_score = sum_g_score.sum((-1, -2)) # batch_size, max_seq_len
+        sum_g_score = sum_g_score.sum((-1), keepdim = True) # batch_size, 1
+        path_score = sum_g_score + sum_h_score
+        path_score.shape # batc_size, 1
+        return path_score
+
+
+    def forward(self, inputs, labels):
+        """
+        inputs: (batch_size, max_seq_len, label_num) embed with latent dim label_nun
+        labels: (batch_size, max_seq_len, label_num) ground-truth label in onehot
+        return: score
+       """
+        path_score = self.path_score(inputs, labels)
+
+        return inputs
+        pass

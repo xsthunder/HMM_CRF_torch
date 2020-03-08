@@ -12,6 +12,8 @@ def pj(*args, **kargs):
     if common.IN_JUPYTER:
         pprint(*args, **kargs)
 
+import operator
+
 # 模型参考https://github.com/bojone/crf/
 # CRF实现参考https://github.com/bojone/crf/blob/master/crf_keras.py#L54
 
@@ -123,6 +125,66 @@ df = pd.DataFrame(tag2id.freq_cnt.items())
 df[ list(map(lambda x:x[0] == 'B' or x[0] == 'S', df[0]) )][1].sum()
 # df
 
+import numpy as np
+cnt = 0
+batch_size = 5
+X = []
+Y = []
+for x, y in read_data():
+    cnt += 1
+    X.append(list(map(  c2id.__getitem__, x)))
+    Y.append(list(map(tag2id.__getitem__, y)))
+
+    if cnt == batch_size:
+        break
+
+
+def padding(X):
+    X = list(X)
+    max_len = max(map(len, X))
+    for i,x in enumerate(X):
+        X[i] = x + [0] * (max_len - len(x))
+    return X
+
+
+# np_X = np.zeros((cnt, max_len, )) # batch_size, max_seq_len,
+train = (X, Y)
+train = list(map(padding,  train))
+train = list(map(np.array, train))
+# torch.LongTensor(X)
+list(map(lambda x:x.shape, train))
+
+import torch
+from torch import nn
+def onehot(y, num):
+    """
+    y: shape (batch_size, max_seq_len)
+    """
+    assert len(y.shape) == 2, y.shape
+    eye = np.eye(num)
+    return eye[y]
+
+onehot(np.array(
+    [
+        [1,2,3],
+        [0,3,1]
+    ]
+), 4)
+
+import torch.functional as F
+num_embeddings = len(c2id) + 1
+num_label = len(tag2id) + 1
+embedding_dim = 64
+lstm_dim = 32
+train_X, train_Y = train
+train_Y = onehot(train_Y, num_label)
+train_Y = torch.Tensor(train_Y)
+train_X = torch.LongTensor(train_X)
+train_X
+emb = nn.Embedding(num_embeddings, embedding_dim)
+lstm = nn.LSTM(input_size=embedding_dim, hidden_size=lstm_dim)
+fc = nn.Linear(lstm_dim, num_label)
+
 def get_shift_mask(labels):
     """
     labels: (batch_size, max_seq_len, num_label) in onehot all element should be 1/0
@@ -156,3 +218,47 @@ for tags, mask in zip(tmp_labels_raw, shift_mask):
         matrix = np.copy(matrix)
         matrix[y_i][y_j] -= 1 # only matrix[y_i][y_j] = 1, else 0
         matrix.sum().should.eql(0)
+
+
+import math
+# 👴的CRF
+class CRF(nn.Module):
+    def __init__(self):
+        super().__init__()
+        # 先不考虑padding标签的问题
+        # 先不考虑mask的问题
+        self.trans = nn.Parameter(torch.Tensor(num_label, num_label))
+        nn.init.kaiming_uniform_(self.trans, a=math.sqrt(5))
+
+    def path_score(self, inputs, labels, trans = None):
+        """
+        score of h(y[i]) ground-truch y[i] plus its g[y[i]][y[i+1]], inputs for h, trans for g
+        inputs.size() # batch_size, max_seq_len, num_label
+        trans.size() # num_label, num_label
+        labels.size() #batch_size, max_seq_len, num_label
+        """
+        trans = self.trans if trans is None else trans
+
+        sum_h_score = inputs * labels # batch_size, max_seq_len, num_label
+        sum_h_score = sum_h_score.sum(-1, ) # batch_size, max_seq_len
+        sum_h_score = sum_h_score.sum(-1, keepdim = True) # batch_size, 1
+
+        mask = get_shift_mask(labels)
+        sum_g_score = mask * trans[None, None]
+        sum_g_score = sum_g_score.sum((-1, -2)) # batch_size, max_seq_len
+        sum_g_score = sum_g_score.sum((-1), keepdim = True) # batch_size, 1
+        path_score = sum_g_score + sum_h_score
+        path_score.shape # batc_size, 1
+        return path_score
+
+
+    def forward(self, inputs, labels):
+        """
+        inputs: (batch_size, max_seq_len, label_num) embed with latent dim label_nun
+        labels: (batch_size, max_seq_len, label_num) ground-truth label in onehot
+        return: score
+       """
+        path_score = self.path_score(inputs, labels)
+
+        return inputs
+        pass
