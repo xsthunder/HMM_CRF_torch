@@ -43,34 +43,21 @@ def get_shift_mask(labels):
 import math
 # 👴的CRF
 class CRF(nn.Module):
-    def __init__(self):
+    def __init__(self, num_label):
         super().__init__()
         # 先不考虑padding标签的问题
         # 先不考虑mask的问题
         self.trans = nn.Parameter(torch.Tensor(num_label, num_label))
         nn.init.kaiming_uniform_(self.trans, a=math.sqrt(5))
 
-    def path_score(self, inputs, labels, trans = None):
-        """
-        score of h(y[i]) ground-truch y[i] plus its g[y[i]][y[i+1]], inputs for h, trans for g
-        inputs.size() # batch_size, max_seq_len, num_label
-        trans.size() # num_label, num_label
-        labels.size() #batch_size, max_seq_len, num_label
-        """
+    def _path_score(self, inputs, labels, trans = None):
         trans = self.trans if trans is None else trans
+        return _path_score(inputs, labels, trans)
 
-        sum_h_score = inputs * labels # batch_size, max_seq_len, num_label
-        sum_h_score = sum_h_score.sum(-1, ) # batch_size, max_seq_len
-        sum_h_score = sum_h_score.sum(-1, keepdim = True) # batch_size, 1
+    def _sum_over_path_score(self, inputs, labels, trans = None):
 
-        mask = get_shift_mask(labels)
-        sum_g_score = mask * trans[None, None]
-        sum_g_score = sum_g_score.sum((-1, -2)) # batch_size, max_seq_len
-        sum_g_score = sum_g_score.sum((-1), keepdim = True) # batch_size, 1
-        path_score = sum_g_score + sum_h_score
-        path_score.shape # batc_size, 1
-        return path_score
-
+        trans = self.trans if trans is None else trans
+        return _sum_over_path_score(inputs, labels, trans)
 
     def forward(self, inputs, labels):
         """
@@ -78,7 +65,45 @@ class CRF(nn.Module):
         labels: (batch_size, max_seq_len, label_num) ground-truth label in onehot
         return: score
        """
-        path_score = self.path_score(inputs, labels)
+        path_score = self._path_score(inputs, labels)
+        sum_over_path = self._sum_over_path_score(inputs, labels)
 
-        return inputs
-        pass
+        return - path_score + sum_over_path
+
+# trans[i][j]表示从i标签转移至j标签
+def _path_score(inputs, labels, trans):
+    """
+    score of h(y[i]) ground-truch y[i] plus its g[y[i]][y[i+1]], inputs for h, trans for g
+    inputs.size() # batch_size, max_seq_len, num_label
+    trans.size() # num_label, num_label
+    labels.size() #batch_size, max_seq_len, num_label
+    """
+    sum_h_score = inputs * labels # batch_size, max_seq_len, num_label
+    sum_h_score = sum_h_score.sum(-1, ) # batch_size, max_seq_len
+    sum_h_score = sum_h_score.sum(-1, keepdim = True) # batch_size, 1
+
+    mask = get_shift_mask(labels)
+    sum_g_score = mask * trans[None, None]
+    sum_g_score = sum_g_score.sum((-1, -2)) # batch_size, max_seq_len
+    sum_g_score = sum_g_score.sum((-1), keepdim = True) # batch_size, 1
+    path_score = sum_g_score + sum_h_score
+    path_score.shape # batc_size, 1
+    return path_score
+
+def _sum_over_path_score(inputs, labels, trans):
+    """
+    @see https://kexue.fm/archives/5542#%E5%BD%92%E4%B8%80%E5%8C%96%E5%9B%A0%E5%AD%90
+    """
+    trans = trans[None, :, :]
+    Z = inputs[:,0,:]
+    inputs = inputs[:, 1:,:]
+    times_seq_len = inputs.shape[1]
+    Z.shape
+    for time_idx in range(times_seq_len):
+            h = inputs[:, time_idx, :]
+            Z = Z[:,:, None] # as row coeffiecient
+            Z = Z + trans
+            Z = torch.logsumexp(Z, -2)
+            Z = Z + h
+    Z = Z.sum(-1)
+    return Z
