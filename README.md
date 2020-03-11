@@ -25,6 +25,8 @@ conda create -n py3torch-cpu python=3.7 scipy=1.4.1 pandas=1.0 tqdm=4.42 -y
 conda activate py3torch-cpu
 conda install pytorch=1.4.0 torchvision=0.5.0 cpuonly=1.0 ipykernel=5.1.4 -c pytorch -y
 # for test
+# avoid tensorflow
+pip install seqeval[cpu] --no-deps
 pip install sure
 ```
 

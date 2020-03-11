@@ -17,6 +17,8 @@ install:
   - conda install pytorch=1.4.0 torchvision=0.5.0 cpuonly=1.0 -c pytorch -y
   # for test
   - yes | pip install sure
+  # avoid tensorflow
+  - yes | pip install seqeval[cpu] --no-deps
  
  
 script:
