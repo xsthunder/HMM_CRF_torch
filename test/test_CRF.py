@@ -500,7 +500,11 @@ tp = (ans, pred)
 tp = tuple(map(tag2id.reveres_list, tp))
 print(classification_report(*tp))
 
-from tqdm.notebook import tqdm
+import tqdm as _tqdm
+if common.IN_JUPYTER:
+    tqdm = _tqdm.notebook.tqdm
+else :
+    tqdm = _tqdm.tqdm
 test_ner = TestNER()
 def train_ep():
     for train in tqdm(get_data(10)):
