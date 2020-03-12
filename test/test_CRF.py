@@ -545,11 +545,32 @@ len(y_pred).should.eql(2)
 
 del testner, train, train_X, train_Y,  y_pred, y_true
 
+# TODO move this to common if duplicates
 import tqdm as _tqdm
+def _empty_tqdm(g):
+    """
+    for travis
+    """
+    try:
+        l = len(l)
+    except:
+        l = '?'
+    for i,x in enumerate(g):
+        i = str(i)
+        print(f"({i}/{l})", end='')
+        yield i
+
 if common.IN_JUPYTER:
     tqdm = _tqdm.notebook.tqdm
+elif common.IN_TRAVIS:
+    tqdm = _empty_tqdm
 else :
     tqdm = _tqdm.tqdm
+
+
+for i in _empty_tqdm(range(10)):
+    pass
+
 test_ner = TestNER()
 def train_ep():
     cnt = 0
@@ -577,5 +598,5 @@ def train_ep():
                 p.data.add_(-lr, p.grad.data)
 
     return loss
-for ep in tqdm(range(5)):
+for ep in tqdm(range(10)):
     print(train_ep())

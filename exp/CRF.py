@@ -224,3 +224,25 @@ def _sum_over_path_score(inputs, labels, trans):
             Z = Z + h
     Z = Z.sum(-1)
     return Z
+
+# TODO move this to common if duplicates
+import tqdm as _tqdm
+def _empty_tqdm(g):
+    """
+    for travis
+    """
+    try:
+        l = len(l)
+    except:
+        l = '?'
+    for i,x in enumerate(g):
+        i = str(i)
+        print(f"({i}/{l})", end='')
+        yield i
+
+if common.IN_JUPYTER:
+    tqdm = _tqdm.notebook.tqdm
+elif common.IN_TRAVIS:
+    tqdm = _empty_tqdm
+else :
+    tqdm = _tqdm.tqdm
