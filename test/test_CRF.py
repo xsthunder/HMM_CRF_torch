@@ -456,11 +456,16 @@ class TestNER(nn.Module):
     def decode(self):
         self.crf.veterbi_decode(self.nodes.detach.numpy())
 
-    def forward(self, inputs, labels):
+    def forward_nodes(self, inputs):
         x = self.emb(inputs)
         x, (hn, cn)= self.lstm(x)
         x = self.fc(x)
         self.nodes = x
+        return x
+
+
+    def forward(self, inputs, labels):
+        x = self.forward_nodes(inputs)
         x = self.crf(x, labels)
         return x
 
@@ -489,16 +494,55 @@ for ep in range(20):
 #     break;
 
 from seqeval.metrics import classification_report
-nodes = torch.Tensor(testner.nodes)
-nodes = nodes.detach().numpy()
-nodes = np.array(nodes)
-trans = testner.crf.trans.detach().numpy()
-for seq_nodes, ans in zip(nodes, train[1]):
-    pred=viterbi(seq_nodes, trans)
-    break
-tp = (ans, pred)
-tp = tuple(map(tag2id.reveres_list, tp))
-print(classification_report(*tp))
+
+class Parser:
+    def __init__(self, model):
+        self.model = model
+
+    def parse_one_seq(self,seq_nodes, trans = None):
+        if trans is None:
+            trans = self.model.crf.trans.detach().numpy()
+        pred=viterbi(seq_nodes, trans)
+        return pred
+
+    def parse_nodes(self, nodes=None, trans=None):
+        if nodes is None:
+            nodes = self.model.nodes.detach().numpy()
+        if trans is None:
+            trans = self.model.crf.trans.detach().numpy()
+
+        parse = partial(self.parse_one_seq, trans = trans)
+        self.y_pred = list(map(parse, nodes))
+        self.y_pred = np.array(self.y_pred)
+        return self.y_pred
+
+    def parse_test(self, test_X, test_Y):
+        assert len(test_Y.shape) == 2, "please give test_Y in shape (batch_size, max_seq_len) tag in sparse int, given"+str(test_Y.shape)
+        with torch.no_grad():
+            nodes = self.model.forward_nodes(test_X)
+        y_pred = self.parse_nodes(nodes)
+        return self.cvt_report(test_Y, y_pred)
+
+    def cvt_report(self, y_pred, y_true):
+        y_pred, y_true = map(self.cvt, (y_pred, y_true))
+        print(list(map(np.shape, (y_pred, y_true ))))
+        print(list(map(np.dtype, (y_pred, y_true ))))
+        print((y_pred, y_true ))
+        return classification_report(y_true, y_pred)
+
+    def cvt(self, y):
+        return list(map(tag2id.reveres_list, y))
+
+parser = Parser(testner)
+y_pred = parser.parse_nodes()
+y_pred = parser.cvt(y_pred)
+y_true = parser.cvt(train[1])
+print(classification_report(y_true, y_pred))
+
+assert isinstance(y_pred, list)
+len(y_pred).should.eql(2)
+
+del testner, train, train_X, train_Y,  y_pred, y_true
 
 import tqdm as _tqdm
 if common.IN_JUPYTER:
@@ -520,7 +564,7 @@ def train_ep():
         loss = outputs.sum()
         loss.backward()
         with torch.no_grad() :
-            for p in testner.parameters():
+            for p in test_ner.parameters():
                 p.data.add_(-lr, p.grad.data)
     return loss
 for ep in tqdm(range(5)):
