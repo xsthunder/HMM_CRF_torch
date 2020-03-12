@@ -12,10 +12,9 @@ def pj(*args, **kargs):
     if common.IN_JUPYTER:
         pprint(*args, **kargs)
 
-import operator
-
 # 模型参考https://github.com/bojone/crf/
 # CRF实现参考https://github.com/bojone/crf/blob/master/crf_keras.py#L54
+import operator
 
 import pandas as pd
 def read_data(Forever=False):
@@ -51,8 +50,9 @@ class C2ID(Counter):
         super().__init__(self)
         self.min_freq = 1
         # 0 for unknow
-        self.indexer = 1
+        self.indexer = 0
         self.freq_cnt = Counter()
+        self._reverse_dict = {}
 
     def touchc(self, c):
         self.freq_cnt[c] += 1
@@ -65,11 +65,26 @@ class C2ID(Counter):
         for k,v in self.freq_cnt.items():
             if v < self.min_freq: continue
             if k in self: continue
+
+            self._reverse_dict[self.indexer]=k
             self[k] = self.indexer
+
             self.indexer += 1
+
+    def reverse(self, idx):
+        return self._reverse_dict[idx]
+
+    def reveres_list(self, list_idx):
+        return list(map(self.reverse, list_idx))
 
 c2id = C2ID()
 tag2id = C2ID()
+# tag2id.indexer = 0
+UNK = 'UNK'
+PAD = 'PAD'
+for cv in [c2id, tag2id]:
+    cv.touchs([UNK, PAD])
+
 for sent, tags in read_data():
     c2id.touchs(sent)
     tag2id.touchs(tags)
@@ -116,7 +131,7 @@ df = pd.DataFrame(c2id.freq_cnt.items())
 df = df.sort_values(by=1)
 df.describe()
 
-# token 的分布
+# tag 的分布
 import pandas  as pd
 sorted(tag2id.freq_cnt.items(), key=operator.itemgetter(1))[:30]
 df = pd.DataFrame(tag2id.freq_cnt.items())
@@ -124,45 +139,64 @@ df = pd.DataFrame(tag2id.freq_cnt.items())
 # df.describe()
 df[ list(map(lambda x:x[0] == 'B' or x[0] == 'S', df[0]) )][1].sum()
 # df
+tag2id.reveres_list([1,2,3])
 
-import numpy as np
-cnt = 0
-batch_size = 5
-X = []
-Y = []
-for x, y in read_data():
-    cnt += 1
-    X.append(list(map(  c2id.__getitem__, x)))
-    Y.append(list(map(tag2id.__getitem__, y)))
-
-    if cnt == batch_size:
-        break
-
-
-def padding(X):
+def padding(padding_idx,X):
     X = list(X)
     max_len = max(map(len, X))
     for i,x in enumerate(X):
-        X[i] = x + [0] * (max_len - len(x))
+        X[i] = x + [padding_idx] * (max_len - len(x))
     return X
-
-
-# np_X = np.zeros((cnt, max_len, )) # batch_size, max_seq_len,
-train = (X, Y)
-train = list(map(padding,  train))
-train = list(map(np.array, train))
-# torch.LongTensor(X)
-list(map(lambda x:x.shape, train))
 
 import torch
 from torch import nn
-def onehot(y, num):
+def onehot(y, dim_size):
     """
     y: shape (batch_size, max_seq_len)
     """
     assert len(y.shape) == 2, y.shape
-    eye = np.eye(num)
+    eye = np.eye(dim_size)
     return eye[y]
+
+import numpy as np
+from functools import partial
+from pprint import pprint
+from tqdm import tqdm
+import math
+assert isinstance( math.ceil(0.3), int)
+
+class get_data():
+    def __init__(self, batch_size = 2):
+        self.batch_size = batch_size
+        self.len = math.ceil( len(list(read_data()))/batch_size )
+
+    def __iter__(self):
+        batch_size = self.batch_size
+        cnt = 0
+        X = []
+        Y = []
+        def set_train():
+            a = padding(c2id[PAD]  , X)
+            b = padding(tag2id[PAD], Y)
+            return tuple(map( np.array, (a,b)))
+        for x, y in read_data():
+            cnt += 1
+            X.append(list(map(  c2id.__getitem__, x)))
+            Y.append(list(map(tag2id.__getitem__, y)))
+
+            if cnt == batch_size:
+                cnt = 0
+                yield set_train()
+
+        return set_train()
+
+    def __len__(self):
+        return self.len
+
+for x in tqdm(get_data()):
+    break
+print(list(map(np.shape, x)))
+x
 
 onehot(np.array(
     [
@@ -171,17 +205,133 @@ onehot(np.array(
     ]
 ), 4)
 
-import torch.functional as F
-num_embeddings = len(c2id) + 1
-num_label = len(tag2id) + 1
-embedding_dim = 64
-lstm_dim = 32
-train_X, train_Y = train
-train_Y = onehot(train_Y, num_label)
-train_Y = torch.Tensor(train_Y)
-train_X = torch.LongTensor(train_X)
-# train_X
+import sure
+from queue import PriorityQueue
+class TopK:
+    def __init__(self, k, topks = None):
+        # (priority_number, data)
+#         pq = PriorityQueue(k)
+        assert k == 1, "not implemented"
 
+        self.m_inf = -float('inf')
+        self.data = None
+        self.score = self.m_inf
+
+        if topks is not None:
+            assert len(topks) >= k
+            for t in topks:
+                self.put( t.get_max_data(), t.get_max_score(),)
+            return
+
+#         for i in range(k):
+#             pq.put_nowait((m_inf))
+#         self.pq = pq
+
+    def put(self,  data, score,):
+        assert len(data) >= 1
+        if self.score is self.m_inf:
+            pass
+        else :
+            assert type(score) == type(self.score), "score type muse consit"
+        if score > self.score:
+            self.score, self.data = score, data
+
+    def __str__(self):
+        return (self.score, self.data).__str__()
+
+    def get_max_score(self):
+        return self.score
+
+    def get_max_data(self):
+        return self.data
+
+    def get_kth_data(self, k):
+        raise NotImplementedError
+
+    def get_kth_score(self, k):
+        raise NotImplementedError
+
+    def __repr__(self):
+        return self.__str__()
+
+
+
+topk = TopK(1)
+for i in range(10):
+    topk.put( [i],i+10,)
+#     print(topk.data)
+# assert topk.
+topk.get_max_data().should.eql([9])
+topk.get_max_score().should.eql(19)
+
+topk = TopK(1)
+topk.put( [1], 1,)
+for i in range(1, 10):
+    t = list(range(i)) + topk.get_max_data()
+    topk.put(t, i)
+topk.m_inf.should.eql(topk.m_inf)
+
+def viterbi(nodes,trans_p, initial_state = None, topk = 1, start_p = None):
+    """
+    nodes: array, [{"<TAG>": <float>}]
+    trans_p: dict, {"<TAG_A>": {"TAG_B": <float>}}, TAG_A -> TAG-B
+    return_max=True: bool, set to False if your want to avoid ill endding tag and find your own.
+    initial_state=None: None or list to avoid impossible starting tags
+    start_p: P(o1), may be nessary
+    all float number in log form
+    """
+    assert len(nodes.shape) == 2,len(nodes.shape)  # max_seq_len, label_num
+    kth = 1
+    if initial_state is None:
+        initial_state = nodes[0]
+        nodes = nodes[1:]
+
+    def init_tok():return TopK(kth)
+
+    def init_toks(): return [init_tok() for i in range(nodes.shape[-1])]
+
+    last_best_nodes = init_toks()
+    next_best_nodes = init_toks()
+
+
+    for idx, (tk,score) in enumerate( zip(last_best_nodes , initial_state)):
+        tk.put([idx], score)
+
+    for node in nodes:
+        for t,v in enumerate(node):
+
+            current_best_node = init_tok() # for t
+
+            for topk in last_best_nodes:
+                path = topk.get_max_data()
+                score = topk.get_max_score()
+
+                last_t = path[-1]
+                new_path = path + [t]
+                tran = trans_p[last_t][t]
+
+                current_best_node.put(new_path, score + tran + v)
+
+            next_best_nodes[t] = current_best_node
+
+        next_best_nodes, last_best_nodes =  last_best_nodes, next_best_nodes,
+
+    topk = TopK(1, last_best_nodes)
+
+    return topk.get_max_data()
+
+nodes = [
+    [1, 2, 1],
+    [1, 1, 3],
+    [4, 1, 3],
+]
+trans = [
+    [1, 1, 1],
+    [1, 1, 1],
+    [1, 1, 1],
+]
+nodes, trans = map(np.array, [nodes, trans])
+viterbi(nodes, trans).should.eql([1,2,0])
 
 def get_shift_mask(labels):
     """
@@ -228,14 +378,14 @@ class CRF(nn.Module):
         self.trans = nn.Parameter(torch.Tensor(num_label, num_label))
         nn.init.kaiming_uniform_(self.trans, a=math.sqrt(5))
 
-    def _path_score(self, inputs, labels, trans = None):
-        trans = self.trans if trans is None else trans
-        return _path_score(inputs, labels, trans)
+    def _path_score(self, inputs, labels):
+        return _path_score(inputs, labels, self.trans)
 
-    def _sum_over_path_score(self, inputs, labels, trans = None):
+    def _sum_over_path_score(self, inputs, labels):
+        return _sum_over_path_score(inputs, labels, self.trans)
 
-        trans = self.trans if trans is None else trans
-        return _sum_over_path_score(inputs, labels, trans)
+    def veterbi_decode(self, nodes):
+        return _veterbi_decode(nodes, self.trans.detached().numpy())
 
     def forward(self, inputs, labels):
         """
@@ -286,18 +436,88 @@ def _sum_over_path_score(inputs, labels, trans):
     Z = Z.sum(-1)
     return Z
 
+import torch.functional as F
+num_embeddings = len(c2id) + 1
+num_label = len(tag2id) + 1
+embedding_dim = 64
+lstm_dim = 32
+
+
+# 不过crf的，用交叉熵
 class TestNER(nn.Module):
     def __init__(self):
         super().__init__()
-        emb = nn.Embedding(num_embeddings, embedding_dim)
-        lstm = nn.LSTM(input_size=embedding_dim, hidden_size=lstm_dim)
-        fc = nn.Linear(lstm_dim, num_label)
-        crf = CRF(num_label)
+        self.emb = nn.Embedding(num_embeddings, embedding_dim)
+        self.lstm = nn.LSTM(input_size=embedding_dim, hidden_size=lstm_dim)
+        self.fc = nn.Linear(lstm_dim, num_label)
+        self.crf = CRF(num_label)
+        self.nodes = None
+
+    def decode(self):
+        self.crf.veterbi_decode(self.nodes.detach.numpy())
 
     def forward(self, inputs, labels):
-        x = emb(inputs)
-        x, (hn, cn)= lstm(x)
-        x = fc(x)
-        x = crf(x, labels)
+        x = self.emb(inputs)
+        x, (hn, cn)= self.lstm(x)
+        x = self.fc(x)
+        self.nodes = x
+        x = self.crf(x, labels)
         return x
 
+lr = 1e-4
+testner = TestNER()
+for train in get_data():
+    break;
+train_X, train_Y = train
+train_Y = onehot(train_Y, num_label)
+train_Y = torch.Tensor(train_Y)
+train_X = torch.LongTensor(train_X)
+for ep in range(20):
+    testner.zero_grad()
+    outputs = testner(train_X, train_Y)
+#     print(outputs.shape, train_Y.shape)
+#     loss = nn.CrossEntropyLoss(outputs, train_Y)
+    loss = outputs.sum()
+#     print(loss)
+#     print(loss)
+    loss.backward()
+    with torch.no_grad() :
+        for p in testner.parameters():
+            p.data.add_(-lr, p.grad.data)
+
+#     testner??
+#     break;
+
+from seqeval.metrics import classification_report
+nodes = torch.Tensor(testner.nodes)
+nodes = nodes.detach().numpy()
+nodes = np.array(nodes)
+trans = testner.crf.trans.detach().numpy()
+for seq_nodes, ans in zip(nodes, train[1]):
+    pred=viterbi(seq_nodes, trans)
+    break
+tp = (ans, pred)
+tp = tuple(map(tag2id.reveres_list, tp))
+print(classification_report(*tp))
+
+from tqdm.notebook import tqdm
+test_ner = TestNER()
+def train_ep():
+    for train in tqdm(get_data(10)):
+        train_X, train_Y = train
+        train_Y = onehot(train_Y, num_label)
+        train_Y = torch.Tensor(train_Y)
+        train_X = torch.LongTensor(train_X)
+
+        test_ner.zero_grad()
+        outputs = test_ner(train_X, train_Y)
+    #     print(outputs.shape, train_Y.shape)
+    #     loss = nn.CrossEntropyLoss(outputs, train_Y)
+        loss = outputs.sum()
+        loss.backward()
+        with torch.no_grad() :
+            for p in testner.parameters():
+                p.data.add_(-lr, p.grad.data)
+    return loss
+for ep in tqdm(range(5)):
+    print(train_ep())
