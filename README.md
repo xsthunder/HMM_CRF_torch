@@ -28,6 +28,8 @@ conda install pytorch=1.4.0 torchvision=0.5.0 cpuonly=1.0 ipykernel=5.1.4 -c pyt
 # avoid tensorflow
 pip install seqeval[cpu] --no-deps
 pip install sure
+# tqdm jupyter support
+conda install -c conda-forge ipywidgets -y
 ```
 
 ### export notebook

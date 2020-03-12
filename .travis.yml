@@ -19,6 +19,8 @@ install:
   - yes | pip install sure
   # avoid tensorflow
   - yes | pip install seqeval[cpu] --no-deps
+  - # tqdm jupyter support
+  - conda install -c conda-forge ipywidgets -y
  
  
 script:
