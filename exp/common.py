@@ -4,6 +4,9 @@
 #################################################
 # file to edit: ./nb/common.ipynb
 
+import os
+IN_TRAVIS=os.getenv('TRAVIS', False)
+
 #https://stackoverflow.com/questions/15411967/how-can-i-check-if-code-is-executed-in-the-ipython-notebook
 def isnotebook():
     try:

@@ -437,8 +437,9 @@ def _sum_over_path_score(inputs, labels, trans):
     return Z
 
 import torch.functional as F
-num_embeddings = len(c2id) + 1
-num_label = len(tag2id) + 1
+# 空也放进去映射了，不用加1，否则回出现随机的tag2id.reserve，键值不存在错误。
+num_embeddings = len(c2id)
+num_label = len(tag2id)
 embedding_dim = 64
 lstm_dim = 32
 
@@ -551,13 +552,21 @@ else :
     tqdm = _tqdm.tqdm
 test_ner = TestNER()
 def train_ep():
+    cnt = 0
     for train in tqdm(get_data(10)):
+        test_ner.zero_grad()
+
+        if common.IN_JUPYTER or common.IN_TRAVIS:
+            # avoid overtime
+            if cnt > 10:
+                break
+        cnt += 1
+
         train_X, train_Y = train
         train_Y = onehot(train_Y, num_label)
         train_Y = torch.Tensor(train_Y)
         train_X = torch.LongTensor(train_X)
 
-        test_ner.zero_grad()
         outputs = test_ner(train_X, train_Y)
     #     print(outputs.shape, train_Y.shape)
     #     loss = nn.CrossEntropyLoss(outputs, train_Y)
@@ -566,6 +575,7 @@ def train_ep():
         with torch.no_grad() :
             for p in test_ner.parameters():
                 p.data.add_(-lr, p.grad.data)
+
     return loss
 for ep in tqdm(range(5)):
     print(train_ep())
