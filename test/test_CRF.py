@@ -547,31 +547,33 @@ del testner, train, train_X, train_Y,  y_pred, y_true
 
 # TODO move this to common if duplicates
 import tqdm as _tqdm
-def _empty_tqdm(g):
+def _simple_tqdm(g):
     """
     for travis
     """
     try:
-        l = len(l)
-    except:
+        l = len(g)
+    except TypeError:
         l = '?'
     for i,x in enumerate(g):
-        i = str(i)
         print(f"({i}/{l})", end='')
         yield x
 
 if common.IN_JUPYTER:
     tqdm = _tqdm.notebook.tqdm
 elif common.IN_TRAVIS:
-    tqdm = _empty_tqdm
+    tqdm = _simple_tqdm
 else :
     tqdm = _tqdm.tqdm
 
 
-for i in _empty_tqdm(range(10)):
+it = _simple_tqdm(1)
+next.when.called_with(it).should.throw(TypeError)
+
+for i in _simple_tqdm(range(10)):
     print(i)
     pass
-for i in _empty_tqdm(get_data()):
+for i in _simple_tqdm(get_data()):
     a, b = i
     break
 
