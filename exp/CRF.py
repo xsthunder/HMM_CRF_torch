@@ -238,7 +238,7 @@ def _empty_tqdm(g):
     for i,x in enumerate(g):
         i = str(i)
         print(f"({i}/{l})", end='')
-        yield i
+        yield x
 
 if common.IN_JUPYTER:
     tqdm = _tqdm.notebook.tqdm

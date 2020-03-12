@@ -558,7 +558,7 @@ def _empty_tqdm(g):
     for i,x in enumerate(g):
         i = str(i)
         print(f"({i}/{l})", end='')
-        yield i
+        yield x
 
 if common.IN_JUPYTER:
     tqdm = _tqdm.notebook.tqdm
@@ -569,7 +569,11 @@ else :
 
 
 for i in _empty_tqdm(range(10)):
+    print(i)
     pass
+for i in _empty_tqdm(get_data()):
+    a, b = i
+    break
 
 test_ner = TestNER()
 def train_ep():
