@@ -13,4 +13,3 @@ yes | pip install seqeval[cpu] --no-deps
 yes | pip install sure
 # tqdm jupyter support
 conda install -c conda-forge ipywidgets -y
-conda install pytorch torchvision cudatoolkit=10.1 -c pytorch -y 
