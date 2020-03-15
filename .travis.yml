@@ -10,21 +10,9 @@ install:
   - hash -r
   - conda config --set always_yes yes --set changeps1 no
   - conda update -q conda
-  - conda create -n py3torch-cpu python=3.7 scipy=1.4.1 ipykernel=5.1.4 pandas=1.0 tqdm=4.42 -y
-  # py3.7 for asyncio.WindowsProactorEventLoopPolicy() support
-  - source $HOME/miniconda/etc/profile.d/conda.sh
-  - conda activate py3torch-cpu
-  - conda install pytorch=1.4.0 torchvision=0.5.0 cpuonly=1.0 -c pytorch -y
-  # for test
-  - yes | pip install sure
-  # avoid tensorflow
-  - yes | pip install seqeval[cpu] --no-deps
-  - # tqdm jupyter support
-  - conda install -c conda-forge ipywidgets -y
+  - bash ./config/create-env.sh
  
  
 script:
-  - source $HOME/miniconda/etc/profile.d/conda.sh
-  - conda activate py3torch-cpu
   - cd test
   - bash run.sh

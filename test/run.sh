@@ -21,7 +21,7 @@ wget https://raw.githubusercontent.com/xsthunder/jieba/master/jieba/dict.txt -P 
 if test $TRAVIS
 then
     source $HOME/miniconda/etc/profile.d/conda.sh
-    conda activate py3torch-cpu
+    conda activate py3torch
 fi
 
 
