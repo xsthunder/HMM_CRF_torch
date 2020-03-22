@@ -61,6 +61,7 @@ def pxy(x, y, name='idk'):
 # (路劲分数/配分函数) < 1
 # log(路劲分数/配分函数) < 0
 # -log(路劲分数/配分函数) > 0
+crf = CRF(num_label)
 args = (inputs, labels)
 loss = crf(inputs, labels)
 assert torch.all(loss > 0)
@@ -73,3 +74,111 @@ ps = crf._path_score(*args).sum()
 # 看了一下trans的初始化，有点区别，感觉没啥问题，都是有正有负，不过j的variance要大一些
 assert sop > ps, "sum of path 应该  > path score"
 del crf
+
+j_crf = J_crf()
+lr=1e-1
+op1 = optim.Adam(j_crf.parameters(), lr=lr)
+y=[]
+x=[]
+for i in range(30):
+    op1.zero_grad()
+    loss = j_crf(inputs, LABELS)
+    x.append(i)
+    y.append(loss.detach().numpy())
+    loss.backward()
+    op1.step()
+pxy(x,y, lr)
+
+del j_crf
+
+# 借用一下j_crf的tran矩阵
+# 同时检验两个path score, 和 sum of path score
+# crf.trans
+crf = CRF(num_label)
+j_crf = J_crf()
+j_crf.crf.transitions = nn.Parameter(torch.ones(3,3))
+crf.trans = nn.Parameter(j_crf.crf.transitions)
+
+sop = crf._sum_over_path_score(*args)
+ps = crf._path_score(*args)
+# loss == spo - ps
+# print(sop, ps,  sop - ps, 'should >0')
+print(ps)
+# assert sop > ps, "sum of path 应该  > path score"
+
+# path score
+# 注意这里给LABELS，和我的不一样，否则会出现batch_size不一致的问题
+assert torch.allclose(ps,j_crf.crf._joint_likelihood(inputs, LABELS, MASK) )
+j_crf.crf._joint_likelihood(inputs, LABELS, MASK)
+
+j_crf.crf._input_likelihood(inputs, MASK), sop
+assert torch.allclose(j_crf.crf._input_likelihood(inputs, MASK), sop)
+
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from functools import partial
+
+tmp = J_crf()
+
+get_model = partial(CRF, num_label)
+# get_model, model, op, lr
+for lr in (1, 1e-1, 1e-2, 1e-3):
+    model = get_model()
+
+    op = optim.Adam(model.parameters(), lr=lr)
+    y=[]
+    x=[]
+    for i in range(100):
+        op1.zero_grad()
+        loss = model(inputs, labels)
+        x.append(i)
+        y.append(loss.detach().numpy())
+        loss.backward()
+        op.step()
+    pxy(x,y, lr)
+
+del get_model, model, op, lr
+
+j_crf = J_crf()
+op1 = optim.Adam(j_crf.parameters(), lr=1e-2)
+with torch.no_grad():
+    print(j_crf(inputs, LABELS), j_crf.crf.transitions)
+
+for lr in (1, 1e-1, 1e-2, 1e-3):
+    j_crf = J_crf()
+    op1 = optim.Adam(j_crf.parameters(), lr=lr)
+    y=[]
+    x=[]
+    for i in range(100):
+        op1.zero_grad()
+        loss = j_crf(inputs, LABELS)
+        x.append(i)
+        y.append(loss.detach().numpy())
+        loss.backward()
+        op1.step()
+    pxy(x,y, lr)
+    del j_crf
+
+from exp.CRF import viterbi
+from functools import partial
+
+get_model = partial(CRF, num_label)
+model = get_model()
+
+lr = 1e-1
+op = optim.Adam(model.parameters(), lr=lr)
+y=[]
+x=[]
+for i in range(100):
+    op1.zero_grad()
+    loss = model(inputs, labels)
+    x.append(i)
+    y.append(loss.detach().numpy())
+    loss.backward()
+    op.step()
+pxy(x,y, lr)
+
+with torch.no_grad():
+    a = viterbi(inputs[0], model.trans)
+
+assert torch.allclose(torch.LongTensor(a), LABELS)
+del get_model, model, op, lr, a
