@@ -7,6 +7,7 @@
 import sys
 if __name__ == '__main__': sys.path.append('..')
 import exp.common as common
+from exp.common import tqdm
 
 import operator
 import numpy as np
@@ -219,24 +220,3 @@ def _sum_over_path_score(inputs, labels, trans):
             Z = Z + h
     Z = torch.logsumexp(Z, -1)
     return Z
-
-# TODO move this to common if duplicates
-import tqdm as _tqdm
-def _simple_tqdm(g):
-    """
-    for travis
-    """
-    try:
-        l = len(g)
-    except TypeError:
-        l = '?'
-    for i,x in enumerate(g):
-        print(f"({i}/{l})", end='')
-        yield x
-
-if common.IN_JUPYTER:
-    tqdm = _tqdm.notebook.tqdm
-elif common.IN_TRAVIS:
-    tqdm = _simple_tqdm
-else :
-    tqdm = _tqdm.tqdm
