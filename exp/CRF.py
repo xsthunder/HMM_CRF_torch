@@ -15,6 +15,7 @@ def pj(*args, **kargs):
 # 模型参考https://github.com/bojone/crf/
 # CRF实现参考https://github.com/bojone/crf/blob/master/crf_keras.py#L54
 import operator
+import numpy as np
 
 def padding(padding_idx,X):
     X = list(X)
@@ -185,7 +186,7 @@ class CRF(nn.Module):
         path_score = self._path_score(inputs, labels)
         sum_over_path = self._sum_over_path_score(inputs, labels)
 
-        return - path_score + sum_over_path
+        return torch.sum(- path_score + sum_over_path)
 
 # trans[i][j]表示从i标签转移至j标签
 def _path_score(inputs, labels, trans):
@@ -199,7 +200,7 @@ def _path_score(inputs, labels, trans):
     sum_h_score = sum_h_score.sum(-1, ) # batch_size, max_seq_len
     sum_h_score = sum_h_score.sum(-1, keepdim = True) # batch_size, 1
 
-    mask = get_shift_mask(labels)
+    mask = get_shift_mask(labels) # (batch_size, max_seq_len, num_label, num_label)
     sum_g_score = mask * trans[None, None]
     sum_g_score = sum_g_score.sum((-1, -2)) # batch_size, max_seq_len
     sum_g_score = sum_g_score.sum((-1), keepdim = True) # batch_size, 1
@@ -211,18 +212,18 @@ def _sum_over_path_score(inputs, labels, trans):
     """
     @see https://kexue.fm/archives/5542#%E5%BD%92%E4%B8%80%E5%8C%96%E5%9B%A0%E5%AD%90
     """
-    trans = trans[None, :, :]
+    trans = trans[None, :, :] # (1, num_label, num_label,)
     Z = inputs[:,0,:]
     inputs = inputs[:, 1:,:]
     times_seq_len = inputs.shape[1]
     Z.shape
     for time_idx in range(times_seq_len):
-            h = inputs[:, time_idx, :]
-            Z = Z[:,:, None] # as row coeffiecient
+            h = inputs[:, time_idx, :] # batch_size, num_label
+            Z = Z[:,:, None] # as row coeffiecient, (batch_size, num_label, 1)
             Z = Z + trans
             Z = torch.logsumexp(Z, -2)
             Z = Z + h
-    Z = Z.sum(-1)
+    Z = torch.logsumexp(Z, -1)
     return Z
 
 # TODO move this to common if duplicates
