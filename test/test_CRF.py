@@ -7,6 +7,7 @@
 import sys
 if __name__ == '__main__': sys.path.append('..')
 import exp.common as common
+from exp.common import tqdm
 
 import operator
 import numpy as np
@@ -474,11 +475,34 @@ class TestNER(nn.Module):
         x = self.crf(x, labels)
         return x
 
-lr = 1e-4
-testner = TestNER()
 for train in get_data():
     break;
-del testner
+
+train_X, train_Y = train
+train_Y = onehot(train_Y, num_label)
+train_Y = torch.Tensor(train_Y)
+train_X = torch.LongTensor(train_X)
+# differs for tensor and model
+
+from torch import optim
+from exp.common import tqdm
+lr = 1e-2
+testner= TestNER()
+
+model = testner
+op = optim.Adam(model.parameters(), lr=lr)
+
+for ep_idx, ep in tqdm(enumerate(range(100))):
+    testner.zero_grad()
+    loss = testner(train_X, train_Y)
+    loss.backward()
+    if(ep_idx%10 == 0):
+        print(loss)
+    op.step()
+
+#     testner??
+#     break;
+# del model, op
 
 from seqeval.metrics import classification_report
 
@@ -524,48 +548,25 @@ parser = Parser(testner)
 y_pred = parser.parse_nodes()
 y_pred = parser.cvt(y_pred)
 y_true = parser.cvt(train[1])
-print(classification_report(y_true, y_pred))
+print(classification_report(y_true, y_pred, ))
 
 assert isinstance(y_pred, list)
 len(y_pred).should.eql(2)
 
 del testner, train, train_X, train_Y,  y_pred, y_true
 
-# TODO move this to common if duplicates
-import tqdm as _tqdm
-def _simple_tqdm(g):
-    """
-    for travis
-    """
-    try:
-        l = len(g)
-    except TypeError:
-        l = '?'
-    for i,x in enumerate(g):
-        print(f"({i}/{l})", end='')
-        yield x
-
-if common.IN_JUPYTER:
-    tqdm = _tqdm.notebook.tqdm
-elif common.IN_TRAVIS:
-    tqdm = _simple_tqdm
-else :
-    tqdm = _tqdm.tqdm
-
-
-it = _simple_tqdm(1)
-next.when.called_with(it).should.throw(TypeError)
-
-for i in _simple_tqdm(range(10)):
-    print(i)
-    pass
-for i in _simple_tqdm(get_data()):
-    a, b = i
-    break
-
+from io import StringIO
+from exp.common import tqdm
+import gc
+strinfos = []
+#test_export
+lr = 1e-2
 test_ner = TestNER()
+model = test_ner
 if is_cuda():
     test_ner.cuda()
+op = optim.Adam(model.parameters(), lr=lr)
+
 def train_ep():
     cnt = 0
     for train in tqdm(get_data(10)):
@@ -573,7 +574,7 @@ def train_ep():
 
         if common.IN_JUPYTER or common.IN_TRAVIS:
             if not is_cuda():
-                if cnt > 5:
+                if cnt > 1:
                     break
             pass
         cnt += 1
@@ -586,7 +587,7 @@ def train_ep():
             train_X = train_X.cuda()
             train_Y = train_Y.cuda()
 
-        outputs = test_ner(train_X, train_Y)
+        outputs = (train_X, train_Y)
     #     print(outputs.shape, train_Y.shape)
     #     loss = nn.CrossEntropyLoss(outputs, train_Y)
         loss = outputs.sum()
@@ -600,4 +601,9 @@ def train_ep():
 #         break
     return loss
 for ep in tqdm(range(10)):
+    if not is_cuda():
+        if ep == 1:
+            break
     print(train_ep())
+
+del model, test_ner, lr
