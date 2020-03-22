@@ -15,6 +15,10 @@ def pj(*args, **kargs):
 # 模型参考https://github.com/bojone/crf/
 # CRF实现参考https://github.com/bojone/crf/blob/master/crf_keras.py#L54
 import operator
+import numpy as np
+
+def is_cuda():
+    return torch.cuda.is_available()
 
 import pandas as pd
 def read_data(Forever=False):
@@ -168,7 +172,8 @@ assert isinstance( math.ceil(0.3), int)
 class get_data():
     def __init__(self, batch_size = 2):
         self.batch_size = batch_size
-        self.len = math.ceil( len(list(read_data()))/batch_size )
+#         self.len = math.ceil( len(list(read_data()))/batch_size )
+        self.len = len(list(read_data()))//batch_size
 
     def __iter__(self):
         batch_size = self.batch_size
@@ -179,14 +184,19 @@ class get_data():
             a = padding(c2id[PAD]  , X)
             b = padding(tag2id[PAD], Y)
             return tuple(map( np.array, (a,b)))
+
         for x, y in read_data():
             cnt += 1
             X.append(list(map(  c2id.__getitem__, x)))
             Y.append(list(map(tag2id.__getitem__, y)))
 
             if cnt == batch_size:
-                cnt = 0
                 yield set_train()
+
+                # clean up
+                cnt = 0
+                X = []
+                Y = []
 
         return set_train()
 
@@ -196,7 +206,7 @@ class get_data():
 for x in tqdm(get_data()):
     break
 print(list(map(np.shape, x)))
-x
+len(get_data())
 
 onehot(np.array(
     [
@@ -396,7 +406,7 @@ class CRF(nn.Module):
         path_score = self._path_score(inputs, labels)
         sum_over_path = self._sum_over_path_score(inputs, labels)
 
-        return - path_score + sum_over_path
+        return torch.sum(- path_score + sum_over_path)
 
 # trans[i][j]表示从i标签转移至j标签
 def _path_score(inputs, labels, trans):
@@ -410,7 +420,7 @@ def _path_score(inputs, labels, trans):
     sum_h_score = sum_h_score.sum(-1, ) # batch_size, max_seq_len
     sum_h_score = sum_h_score.sum(-1, keepdim = True) # batch_size, 1
 
-    mask = get_shift_mask(labels)
+    mask = get_shift_mask(labels) # (batch_size, max_seq_len, num_label, num_label)
     sum_g_score = mask * trans[None, None]
     sum_g_score = sum_g_score.sum((-1, -2)) # batch_size, max_seq_len
     sum_g_score = sum_g_score.sum((-1), keepdim = True) # batch_size, 1
@@ -422,18 +432,18 @@ def _sum_over_path_score(inputs, labels, trans):
     """
     @see https://kexue.fm/archives/5542#%E5%BD%92%E4%B8%80%E5%8C%96%E5%9B%A0%E5%AD%90
     """
-    trans = trans[None, :, :]
+    trans = trans[None, :, :] # (1, num_label, num_label,)
     Z = inputs[:,0,:]
     inputs = inputs[:, 1:,:]
     times_seq_len = inputs.shape[1]
     Z.shape
     for time_idx in range(times_seq_len):
-            h = inputs[:, time_idx, :]
-            Z = Z[:,:, None] # as row coeffiecient
+            h = inputs[:, time_idx, :] # batch_size, num_label
+            Z = Z[:,:, None] # as row coeffiecient, (batch_size, num_label, 1)
             Z = Z + trans
             Z = torch.logsumexp(Z, -2)
             Z = Z + h
-    Z = Z.sum(-1)
+    Z = torch.logsumexp(Z, -1)
     return Z
 
 import torch.functional as F
@@ -474,25 +484,7 @@ lr = 1e-4
 testner = TestNER()
 for train in get_data():
     break;
-train_X, train_Y = train
-train_Y = onehot(train_Y, num_label)
-train_Y = torch.Tensor(train_Y)
-train_X = torch.LongTensor(train_X)
-for ep in range(20):
-    testner.zero_grad()
-    outputs = testner(train_X, train_Y)
-#     print(outputs.shape, train_Y.shape)
-#     loss = nn.CrossEntropyLoss(outputs, train_Y)
-    loss = outputs.sum()
-#     print(loss)
-#     print(loss)
-    loss.backward()
-    with torch.no_grad() :
-        for p in testner.parameters():
-            p.data.add_(-lr, p.grad.data)
-
-#     testner??
-#     break;
+del testner
 
 from seqeval.metrics import classification_report
 
@@ -578,21 +570,27 @@ for i in _simple_tqdm(get_data()):
     break
 
 test_ner = TestNER()
+if is_cuda():
+    test_ner.cuda()
 def train_ep():
     cnt = 0
     for train in tqdm(get_data(10)):
         test_ner.zero_grad()
 
         if common.IN_JUPYTER or common.IN_TRAVIS:
-            # avoid overtime
-            if cnt > 10:
-                break
+            if not is_cuda():
+                if cnt > 5:
+                    break
+            pass
         cnt += 1
 
         train_X, train_Y = train
         train_Y = onehot(train_Y, num_label)
         train_Y = torch.Tensor(train_Y)
         train_X = torch.LongTensor(train_X)
+        if is_cuda():
+            train_X = train_X.cuda()
+            train_Y = train_Y.cuda()
 
         outputs = test_ner(train_X, train_Y)
     #     print(outputs.shape, train_Y.shape)
@@ -602,7 +600,10 @@ def train_ep():
         with torch.no_grad() :
             for p in test_ner.parameters():
                 p.data.add_(-lr, p.grad.data)
-
+        strinfos.append(StringIO(f"{cnt}"))
+        print_gc(strinfos[-1])
+        gc.collect()
+#         break
     return loss
 for ep in tqdm(range(10)):
     print(train_ep())
