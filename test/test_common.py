@@ -22,6 +22,10 @@ def isnotebook():
         return False      # Probably standard Python interpreter
 IN_JUPYTER = isnotebook()
 
+def ex_command(code):
+    ip = get_ipython()
+    ip.run_cell(code)
+
 
 # use those only in jupyter
 from IPython.display import display, Javascript
@@ -42,9 +46,8 @@ def save_and_export_notebook(name):
     time.sleep(1)
 
     # support import complie
-    ip = get_ipython()
-    ip.run_cell(f'!python notebook2script.py {name}')
-    ip.run_cell(f'!python notebook2test_script.py {name}')
+    ex_command(f'!python notebook2script.py {name}')
+    ex_command(f'!python notebook2test_script.py {name}')
 
     save_notebook() # for exitting
 

@@ -7,13 +7,7 @@
 import sys
 if __name__ == '__main__': sys.path.append('..')
 import exp.common as common
-from pprint import pprint
-def pj(*args, **kargs):
-    if common.IN_JUPYTER:
-        pprint(*args, **kargs)
 
-# 模型参考https://github.com/bojone/crf/
-# CRF实现参考https://github.com/bojone/crf/blob/master/crf_keras.py#L54
 import operator
 import numpy as np
 
