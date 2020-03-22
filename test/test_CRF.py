@@ -570,15 +570,7 @@ op = optim.Adam(model.parameters(), lr=lr)
 def train_ep():
     cnt = 0
     for train in tqdm(get_data(10)):
-        test_ner.zero_grad()
-
-        if common.IN_JUPYTER or common.IN_TRAVIS:
-            if not is_cuda():
-                if cnt > 1:
-                    break
-            pass
-        cnt += 1
-
+        op.zero_grad()
         train_X, train_Y = train
         train_Y = onehot(train_Y, num_label)
         train_Y = torch.Tensor(train_Y)
@@ -587,17 +579,18 @@ def train_ep():
             train_X = train_X.cuda()
             train_Y = train_Y.cuda()
 
-        outputs = (train_X, train_Y)
+        loss = model(train_X, train_Y)
     #     print(outputs.shape, train_Y.shape)
     #     loss = nn.CrossEntropyLoss(outputs, train_Y)
-        loss = outputs.sum()
         loss.backward()
-        with torch.no_grad() :
-            for p in test_ner.parameters():
-                p.data.add_(-lr, p.grad.data)
+        op.step()
         strinfos.append(StringIO(f"{cnt}"))
-        print_gc(strinfos[-1])
         gc.collect()
+        if common.IN_JUPYTER or common.IN_TRAVIS:
+            if not is_cuda():
+                print(loss)
+                if cnt > 1: break
+        cnt += 1
 #         break
     return loss
 for ep in tqdm(range(10)):
