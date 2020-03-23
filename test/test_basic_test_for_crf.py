@@ -158,7 +158,7 @@ for lr in (1, 1e-1, 1e-2, 1e-3):
     pxy(x,y, lr)
     del j_crf
 
-from exp.CRF import viterbi
+from exp.CRF import j_viterbi as viterbi
 from functools import partial
 
 get_model = partial(CRF, num_label)
@@ -178,7 +178,7 @@ for i in range(100):
 pxy(x,y, lr)
 
 with torch.no_grad():
-    a = viterbi(inputs[0], model.trans)
+    a = viterbi(inputs, model.trans)
 
 assert torch.allclose(torch.LongTensor(a), LABELS)
 del get_model, model, op, lr, a
