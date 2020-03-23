@@ -22,18 +22,29 @@ def isnotebook():
         return False      # Probably standard Python interpreter
 IN_JUPYTER = isnotebook()
 
+print(IN_TRAVIS,'IN_TRAVIS' )
+print( IN_JUPYTER , 'IN_JUPYTER ')
+
 import tqdm as _tqdm
-def _simple_tqdm(g):
+class _simple_tqdm:
     """
     for travis
     """
-    try:
-        l = len(g)
-    except TypeError:
-        l = '?'
-    for i,x in enumerate(g):
-        print(f"({i}/{l})", end='')
-        yield x
+    def __init__(self, g):
+        self.g = g
+        try:
+            l = len(g)
+        except TypeError:
+            l = '?'
+        self.l = l
+
+    def __iter__(self):
+        for i,x in enumerate(self.g):
+            print(f"({i}/{self.l})", end='')
+            yield x
+
+    def __len__(self):
+        return self.l
 
 if IN_JUPYTER:
     tqdm = _tqdm.tqdm_notebook
@@ -42,8 +53,12 @@ elif IN_TRAVIS:
 else :
     tqdm = _tqdm.tqdm
 
+for i in _simple_tqdm(range(10)):
+    print(i)
+
 def ex_command(code):
     ip = get_ipython()
+    # this depends on the environment where jupyter launchs
     ip.run_cell(code)
 
 

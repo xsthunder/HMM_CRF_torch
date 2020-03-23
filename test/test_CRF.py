@@ -148,6 +148,9 @@ df[ list(map(lambda x:x[0] == 'B' or x[0] == 'S', df[0]) )][1].sum()
 # df
 tag2id.reveres_list([1,2,3])
 
+num_embeddings = len(c2id)
+num_label = len(tag2id)
+
 def padding(padding_idx,X):
     X = list(X)
     max_len = max(map(len, X))
@@ -206,6 +209,24 @@ class get_data():
 
     def __len__(self):
         return self.len
+
+for train in common.tqdm(get_data()):
+    pass
+print(list(map(np.shape, train)),  len(get_data()) )
+
+def parse_train(train):
+    train_X, train_Y = train
+    train_Y = onehot(train_Y, num_label)
+    train_Y = torch.Tensor(train_Y)
+    train_X = torch.LongTensor(train_X)
+    return train_X, train_Y
+list(map(lambda x:x.shape, parse_train(train)))
+
+for train in common.tqdm(get_data(status='test')):
+    pass
+print(list(map(np.shape, train)))
+print(list(map(lambda x:x.shape, parse_train(train))),  len(get_data(status='test')) )
+del train
 
 onehot(np.array(
     [
@@ -710,9 +731,10 @@ def train_ep(TEST=False, show_bar=True):
         op.step()
 #         strinfos.append(StringIO(f"{cnt}"))
         gc.collect()
+        loss = loss.cpu().detach().numpy()
         if common.IN_JUPYTER or common.IN_TRAVIS:
             if is_cuda():
-                loss = loss.cpu().detach().numpy()
+                pass
             else :
                 print(loss)
                 if cnt > 1: break
