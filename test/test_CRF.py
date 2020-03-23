@@ -16,11 +16,11 @@ def is_cuda():
     return torch.cuda.is_available()
 
 import pandas as pd
-def read_data(Forever=False):
+def read_data(Forever=False, status='train'):
     sent, tags = [],[]
     con = True
     while con:
-        with open('../data/CRF/ResumeNER/train.char.bmes', 'r', encoding='UTF-8') as f:
+        with open(f'../data/CRF/ResumeNER/{status}.char.bmes', 'r', encoding='UTF-8') as f:
             for line in f.readlines():
                 line = line.strip()
                 if not line:
@@ -36,6 +36,14 @@ def read_data(Forever=False):
 
 from torch.utils.data import DataLoader
 # next(read_data())
+
+for data in read_data(status='test'):
+    break
+# data
+
+for data in read_data():
+    break
+# data
 
 import sure
 from collections import Counter
@@ -165,10 +173,11 @@ import math
 assert isinstance( math.ceil(0.3), int)
 
 class get_data():
-    def __init__(self, batch_size = 2):
+    def __init__(self, batch_size = 2, status='train'):
         self.batch_size = batch_size
 #         self.len = math.ceil( len(list(read_data()))/batch_size )
-        self.len = len(list(read_data()))//batch_size
+        self.status = status
+        self.len = len(list(read_data(status=self.status)))//batch_size
 
     def __iter__(self):
         batch_size = self.batch_size
@@ -180,7 +189,7 @@ class get_data():
             b = padding(tag2id[PAD], Y)
             return tuple(map( np.array, (a,b)))
 
-        for x, y in read_data():
+        for x, y in read_data(status=self.status):
             cnt += 1
             X.append(list(map(  c2id.__getitem__, x)))
             Y.append(list(map(tag2id.__getitem__, y)))
@@ -197,11 +206,6 @@ class get_data():
 
     def __len__(self):
         return self.len
-
-for x in tqdm(get_data()):
-    break
-print(list(map(np.shape, x)))
-len(get_data())
 
 onehot(np.array(
     [
@@ -276,6 +280,61 @@ for i in range(1, 10):
     topk.put(t, i)
 topk.m_inf.should.eql(topk.m_inf)
 
+def j_viterbi(logits, transitions):
+    """
+    Uses viterbi algorithm to find most likely tags for the given inputs.
+    If constraints are applied, disallows all other transitions.
+    Returns a tensor with the same size as the mask (not list)
+    """
+    logits = model.nodes
+    mask = None
+    transitions = model.crf.trans
+    batch_size, sequence_length, num_tags = logits.size()
+
+    if mask is None:
+        mask = torch.ones(*logits.shape[:2], dtype=torch.bool, device=logits.device)
+
+    # Augment transitions matrix with start and end transitions
+    start_tag = num_tags
+    end_tag = num_tags + 1
+
+    # Apply transition constraints
+    # inverse mask because torch.masked_fill will fill value when mask is True
+    constrained_transitions = transitions.detach()
+    # transitions[:num_tags, :num_tags] = constrained_transitions
+
+    history = []
+    # Transpose batch size and sequence dimensions
+    mask = mask.transpose(0, 1).bool()
+    logits = logits.transpose(0, 1)
+
+    score = logits[0]
+
+    # For each i we compute logits for the transitions from timestep i-1 to timestep i.
+    # We do so in a (batch_size, num_tags, num_tags) tensor where the axes are
+    # (instance, current_tag, next_tag)
+    for i in range(1, sequence_length):
+        # The emit scores are for time i ("next_tag") so we broadcast along the current_tag axis.
+        emit_scores = logits[i].view(batch_size, 1, num_tags)
+        broadcast_score = score.view(batch_size, num_tags, 1)
+        inner = broadcast_score + emit_scores + constrained_transitions
+        update_score, indices = inner.max(dim=1)
+        # if mask[i] is True(mask[i] == 1 means this char is not padded) we use new_score,
+        # otherwise last score.
+        score = torch.where(mask[i].unsqueeze(1), update_score, score)
+        history.append(indices)
+    last_indices = score.argmax(-1)
+    best_path = [last_indices]
+    indices = last_indices
+    # backtrace the path inversely
+    for i in range(-1, -sequence_length, -1):
+        recur_indices = history[i].gather(1, indices.view(batch_size, 1)).squeeze()
+        indices = torch.where(mask[i], recur_indices, indices)
+        best_path.insert(0, indices)
+    best_path = torch.stack(best_path).transpose(0, 1)
+    return best_path
+
+# dont use this
 def viterbi(nodes,trans_p, initial_state = None, topk = 1, start_p = None):
     """
     nodes: array, [{"<TAG>": <float>}]
@@ -443,11 +502,9 @@ def _sum_over_path_score(inputs, labels, trans):
 
 import torch.functional as F
 # 空也放进去映射了，不用加1，否则回出现随机的tag2id.reserve，键值不存在错误。
-num_embeddings = len(c2id)
-num_label = len(tag2id)
 embedding_dim = 64
 lstm_dim = 32
-
+len(tag2id)
 
 # 不过crf的，用交叉熵
 class TestNER(nn.Module):
@@ -475,106 +532,173 @@ class TestNER(nn.Module):
         x = self.crf(x, labels)
         return x
 
-for train in get_data():
-    break;
-
-train_X, train_Y = train
-train_Y = onehot(train_Y, num_label)
-train_Y = torch.Tensor(train_Y)
-train_X = torch.LongTensor(train_X)
-# differs for tensor and model
-
 from torch import optim
 from exp.common import tqdm
+for train in get_data(10):
+    break;
+train_X, train_Y = parse_train(train)
+# differs for tensor and model
 lr = 1e-2
 testner= TestNER()
-
 model = testner
+del testner
 op = optim.Adam(model.parameters(), lr=lr)
 
 for ep_idx, ep in tqdm(enumerate(range(100))):
-    testner.zero_grad()
-    loss = testner(train_X, train_Y)
+    model.zero_grad()
+    loss = model(train_X, train_Y)
     loss.backward()
     if(ep_idx%10 == 0):
         print(loss)
     op.step()
 
-#     testner??
-#     break;
-# del model, op
 
-from seqeval.metrics import classification_report
+from seqeval.metrics import classification_report, accuracy_score
 
 class Parser:
     def __init__(self, model):
         self.model = model
+        self.in_place_nodes = False
 
     def parse_one_seq(self,seq_nodes, trans = None):
         if trans is None:
-            trans = self.model.crf.trans.detach().numpy()
+            trans = self.model.crf.trans.cpu().detach().numpy()
         pred=viterbi(seq_nodes, trans)
         return pred
 
     def parse_nodes(self, nodes=None, trans=None):
         if nodes is None:
-            nodes = self.model.nodes.detach().numpy()
+            nodes = self.model.nodes.cpu().detach()
         if trans is None:
-            trans = self.model.crf.trans.detach().numpy()
+            trans = self.model.crf.trans.cpu().detach()
 
-        parse = partial(self.parse_one_seq, trans = trans)
-        self.y_pred = list(map(parse, nodes))
-        self.y_pred = np.array(self.y_pred)
+#         parse = partial(self.parse_one_seq, trans = trans)
+#         self.y_pred = list(common.tqdm(map(parse, nodes)))
+        self.y_pred = j_viterbi(nodes, trans)
         return self.y_pred
 
-    def parse_test(self, test_X, test_Y):
+    def parse_test_y_pred(self, test_X, test_Y):
         assert len(test_Y.shape) == 2, "please give test_Y in shape (batch_size, max_seq_len) tag in sparse int, given"+str(test_Y.shape)
-        with torch.no_grad():
-            nodes = self.model.forward_nodes(test_X)
+        if self.in_place_nodes:
+            nodes = None
+        else :
+            with torch.no_grad():
+                nodes = self.model.forward_nodes(test_X)
         y_pred = self.parse_nodes(nodes)
-        return self.cvt_report(test_Y, y_pred)
+        return y_pred, test_Y
 
-    def cvt_report(self, y_pred, y_true):
+    def parse_test_cls_report(self, test_X, test_Y):
+        """
+        one in all
+        """
+        y_pred, y_true = self.parse_test_y_pred(test_X, test_Y)
+#         y_pred = self.parse_nodes()
+#         y_true = test_Y
         y_pred, y_true = map(self.cvt, (y_pred, y_true))
-        print(list(map(np.shape, (y_pred, y_true ))))
-        print(list(map(np.dtype, (y_pred, y_true ))))
-        print((y_pred, y_true ))
         return classification_report(y_true, y_pred)
 
+    def parse_test_acc(self, test_X, test_Y):
+        y_pred, y_true = self.parse_test_y_pred(test_X, test_Y)
+        y_pred, y_true = map(self.cvt, (y_pred, y_true))
+        return accuracy_score(y_true, y_pred)
+
     def cvt(self, y):
+        if isinstance(y, torch.Tensor) :y = y.cpu().numpy()
         return list(map(tag2id.reveres_list, y))
 
-parser = Parser(testner)
+
+parser = Parser(model)
 y_pred = parser.parse_nodes()
 y_pred = parser.cvt(y_pred)
 y_true = parser.cvt(train[1])
-print(classification_report(y_true, y_pred, ))
+report = classification_report(y_true, y_pred)
+acc = accuracy_score(y_true, y_pred)
+acc.should.eql(1.0, 0.05)
+
+# 应该是上一个的两倍时间
+parser.in_place_nodes = True
+assert report == parser.parse_test_cls_report(train_X, train[1])
+parser.parse_test_acc(train_X, train[1]).should.eql(1.0)
+
+#应该是上一个的10倍时间
+parser.in_place_nodes = False
+assert report == parser.parse_test_cls_report(train_X, train[1])
+parser.parse_test_acc(train_X, train[1]).should.eql(1.0)
+print('all should be one', report, sep='\n')
 
 assert isinstance(y_pred, list)
-len(y_pred).should.eql(2)
 
-del testner, train, train_X, train_Y,  y_pred, y_true
+del train, train_X, train_Y,  y_pred, y_true, report
+del model
+
+class Metric():
+    def __init__(self, status, parser):
+        self.status = status
+        self.parse = parser
+
+    def cal_metric(self,  fn):
+        parser, = self.parse,
+        all_y_pred, all_y_true = [], []
+        for test in get_data(100, status=self.status):
+            test_X, _ = parse_train(test)
+            if is_cuda():test_X = test_X.cuda()
+            y_pred, y_true = parser.parse_test_y_pred(test_X, test[1])
+            y_pred, y_true = map(parser.cvt, (y_pred, y_true))
+            all_y_pred += y_pred
+            all_y_true += y_true
+        return fn(all_y_true, all_y_pred)
+
+    def cal_acc(self):
+        return self.cal_metric(accuracy_score)
+
+    def cal_report(self):
+        return self.cal_metric(classification_report)
+
 
 from io import StringIO
 from exp.common import tqdm
 import gc
 strinfos = []
-#test_export
-lr = 1e-2
+lr = 1e-1
 test_ner = TestNER()
+# if is_cuda():
+#     test_ner.cuda()
 model = test_ner
-if is_cuda():
-    test_ner.cuda()
+del test_ner
 op = optim.Adam(model.parameters(), lr=lr)
 
-def train_ep():
+from torch import optim
+from exp.common import tqdm
+for train in get_data():
+    break;
+train_X, train_Y = parse_train(train)
+# differs for tensor and model
+lr = 1e-2
+parser = Parser(model)
+op = optim.Adam(model.parameters(), lr=lr)
+
+if is_cuda():
+    model.cuda()
+    train_X, train_Y = map(lambda x:x.cuda(), (train_X, train_Y ) )
+
+dev_metric = Metric('dev',  parser )
+for ep_idx, ep in tqdm(enumerate(range(20))):
+    model.zero_grad()
+    loss = model(train_X, train_Y)
+    loss.backward()
+    if(ep_idx%10 == 0):
+        print(loss.item(), dev_metric.cal_acc())
+    op.step()
+
+
+def train_ep(TEST=False, show_bar=True):
     cnt = 0
-    for train in tqdm(get_data(10)):
+    it = get_data(100)
+    it = common.tqdm(it) if show_bar else it
+    losses = np.zeros(shape=(len(it), 1))
+    for train in it:
         op.zero_grad()
-        train_X, train_Y = train
-        train_Y = onehot(train_Y, num_label)
-        train_Y = torch.Tensor(train_Y)
-        train_X = torch.LongTensor(train_X)
+        train_X, train_Y = parse_train(train)
         if is_cuda():
             train_X = train_X.cuda()
             train_Y = train_Y.cuda()
@@ -584,19 +708,43 @@ def train_ep():
     #     loss = nn.CrossEntropyLoss(outputs, train_Y)
         loss.backward()
         op.step()
-        strinfos.append(StringIO(f"{cnt}"))
+#         strinfos.append(StringIO(f"{cnt}"))
         gc.collect()
         if common.IN_JUPYTER or common.IN_TRAVIS:
-            if not is_cuda():
+            if is_cuda():
+                loss = loss.cpu().detach().numpy()
+            else :
                 print(loss)
                 if cnt > 1: break
+
+            if TEST and cnt > 5: break
+
+        losses[cnt] = loss
         cnt += 1
 #         break
-    return loss
-for ep in tqdm(range(10)):
+    return range(cnt), losses
+tp = train_ep(True)
+loss = tp[1].mean()
+acc = dev_metric.cal_acc()
+loss, acc
+
+epo_losses = []
+epo_acces = []
+
+for ep in common.tqdm(range(5)):
     if not is_cuda():
         if ep == 1:
             break
-    print(train_ep())
+    tp = train_ep(show_bar=False)
+    loss = tp[1].mean()
+    acc = dev_metric.cal_acc()
+    print(loss, acc)
+    epo_losses.append(loss)
+    epo_acces.append(acc)
 
-del model, test_ner, lr
+test_metric = Metric('test', parser)
+test_acc = test_metric.cal_acc()
+dev_metric.cal_acc().should_not.equal(test_acc, 1e-5)
+
+print(dev_metric.cal_report())
+

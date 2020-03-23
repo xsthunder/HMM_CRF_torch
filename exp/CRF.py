@@ -88,6 +88,61 @@ for i in range(10):
 topk.get_max_data().should.eql([9])
 topk.get_max_score().should.eql(19)
 
+def j_viterbi(logits, transitions):
+    """
+    Uses viterbi algorithm to find most likely tags for the given inputs.
+    If constraints are applied, disallows all other transitions.
+    Returns a tensor with the same size as the mask (not list)
+    """
+    logits = model.nodes
+    mask = None
+    transitions = model.crf.trans
+    batch_size, sequence_length, num_tags = logits.size()
+
+    if mask is None:
+        mask = torch.ones(*logits.shape[:2], dtype=torch.bool, device=logits.device)
+
+    # Augment transitions matrix with start and end transitions
+    start_tag = num_tags
+    end_tag = num_tags + 1
+
+    # Apply transition constraints
+    # inverse mask because torch.masked_fill will fill value when mask is True
+    constrained_transitions = transitions.detach()
+    # transitions[:num_tags, :num_tags] = constrained_transitions
+
+    history = []
+    # Transpose batch size and sequence dimensions
+    mask = mask.transpose(0, 1).bool()
+    logits = logits.transpose(0, 1)
+
+    score = logits[0]
+
+    # For each i we compute logits for the transitions from timestep i-1 to timestep i.
+    # We do so in a (batch_size, num_tags, num_tags) tensor where the axes are
+    # (instance, current_tag, next_tag)
+    for i in range(1, sequence_length):
+        # The emit scores are for time i ("next_tag") so we broadcast along the current_tag axis.
+        emit_scores = logits[i].view(batch_size, 1, num_tags)
+        broadcast_score = score.view(batch_size, num_tags, 1)
+        inner = broadcast_score + emit_scores + constrained_transitions
+        update_score, indices = inner.max(dim=1)
+        # if mask[i] is True(mask[i] == 1 means this char is not padded) we use new_score,
+        # otherwise last score.
+        score = torch.where(mask[i].unsqueeze(1), update_score, score)
+        history.append(indices)
+    last_indices = score.argmax(-1)
+    best_path = [last_indices]
+    indices = last_indices
+    # backtrace the path inversely
+    for i in range(-1, -sequence_length, -1):
+        recur_indices = history[i].gather(1, indices.view(batch_size, 1)).squeeze()
+        indices = torch.where(mask[i], recur_indices, indices)
+        best_path.insert(0, indices)
+    best_path = torch.stack(best_path).transpose(0, 1)
+    return best_path
+
+# dont use this
 def viterbi(nodes,trans_p, initial_state = None, topk = 1, start_p = None):
     """
     nodes: array, [{"<TAG>": <float>}]
